@@ -34,9 +34,33 @@
 
         <activity
             android:name=".admin.InstallInProfileActivity"
-            android:exported="true">
+            android:enabled="false"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="com.example.INSTALL_PKG" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".admin.ProvisioningModeActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <intent-filter>
+                <action android:name="android.app.action.GET_PROVISIONING_MODE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".admin.PolicyComplianceActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <intent-filter>
+                <action android:name="android.app.action.ADMIN_POLICY_COMPLIANCE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

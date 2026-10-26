@@ -29,26 +29,28 @@ class CloneEngineManager(private val context: Context) {
         val wpState = WorkProfiles.state(context)
         val wpSupported = wpState != WorkProfileState.UNSUPPORTED
 
-        val (engine, reason) = when (userPreference) {
-            "OEM_DUAL_APPS" -> {
+        val (engine, reason) = when (userPreference.uppercase()) {
+            "OEM_DUAL_APPS", "OEM_DUAL_APP", "OEM" -> {
                 if (oemSupported) {
                     oemDualAppEngine to "Selected by user preference: native ${Build.MANUFACTURER.uppercase()} engine."
                 } else {
                     workProfileEngine to "OEM engine requested but device not supporting it; falling back to Work Profile."
                 }
             }
-            "WORK_PROFILE" -> {
+            "WORK_PROFILE", "WORKPROFILE" -> {
                 workProfileEngine to "Selected by user preference: Android Work Profile sandbox."
             }
-            "VIRTUALIZATION" -> {
+            "VIRTUALIZATION", "VIRT" -> {
                 virtualizationEngine to "Selected by user preference: experimental sandboxed virtualization."
             }
             else -> { // AUTO mode
                 if (oemSupported) {
                     val mfgName = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
-                    oemDualAppEngine to "Automatically selected $mfgName Dual Space engine for best stability."
+                    oemDualAppEngine to "Automatically selected $mfgName Native Dual Space engine."
+                } else if (wpState == WorkProfileState.READY) {
+                    workProfileEngine to "Android Work Profile is ready and active."
                 } else if (wpSupported) {
-                    workProfileEngine to "Automatically selected Android Work Profile sandbox for OS-level isolation."
+                    workProfileEngine to "Android Work Profile sandbox for OS-level isolation."
                 } else {
                     virtualizationEngine to "Selected Virtualization Engine."
                 }
