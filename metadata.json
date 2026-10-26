@@ -1,0 +1,6 @@
+{
+  "name": "Multiclonix Space",
+  "description": "Run second isolated accounts for social and messaging apps with smart dual-space management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
