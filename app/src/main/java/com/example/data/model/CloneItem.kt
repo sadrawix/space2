@@ -4,11 +4,6 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/**
- * Merge with your existing CloneItem (keep any extra columns you already use).
- * Bump the Room version. The simplest migration is a destructive one, which
- * also wipes the fake clones created by the old fallback bug.
- */
 @Entity(
     tableName = "clones",
     indices = [Index(value = ["packageName", "engineType", "instanceIndex"], unique = true)]
@@ -25,5 +20,7 @@ data class CloneItem(
     val isLocked: Boolean = false,
     val notificationsEnabled: Boolean = true,
     val lastLaunchedAt: Long = 0L,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val sandboxUuid: String = "",
+    val sandboxPath: String = ""
 )

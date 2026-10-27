@@ -2,6 +2,7 @@ package com.example.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.plan.PinHasher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +36,15 @@ class PreferencesManager(context: Context) {
     }
 
     fun setSpaceLock(enabled: Boolean, pin: String) {
-        val hashedPin = hashPin(pin)
+        val hashedPin = if (enabled && pin.isNotEmpty()) {
+            if (pin.length == 64 && pin.all { it in "0123456789abcdefABCDEF" }) {
+                pin
+            } else {
+                PinHasher.hash(pin)
+            }
+        } else {
+            ""
+        }
         prefs.edit()
             .putBoolean(KEY_SPACE_LOCK, enabled)
             .putString(KEY_SPACE_PIN, hashedPin)
@@ -45,9 +54,26 @@ class PreferencesManager(context: Context) {
     }
 
     fun verifyPin(enteredPin: String): Boolean {
-        if (_spacePin.value.isEmpty()) return true
-        val hashedEntered = hashPin(enteredPin)
-        return hashedEntered == _spacePin.value
+        val stored = _spacePin.value
+        if (stored.isEmpty()) return true
+        if (enteredPin.isEmpty()) return false
+
+        val standardHash = PinHasher.hash(enteredPin)
+        val doubleHash = hashPin(standardHash)
+        val plainSha256 = hashPin(enteredPin)
+
+        val isMatch = stored == standardHash ||
+                stored == doubleHash ||
+                stored == plainSha256 ||
+                stored == enteredPin
+
+        if (isMatch && stored != standardHash) {
+            // Auto-migrate legacy or double-hashed PIN to standard salted hash
+            prefs.edit().putString(KEY_SPACE_PIN, standardHash).apply()
+            _spacePin.value = standardHash
+        }
+
+        return isMatch
     }
 
     fun setPreferredEngine(engine: String) {
@@ -65,7 +91,7 @@ class PreferencesManager(context: Context) {
         _hasCompletedOnboarding.value = completed
     }
 
-    private fun hashPin(pin: String): String {
+    internal fun hashPin(pin: String): String {
         if (pin.isEmpty()) return ""
         return try {
             val digest = MessageDigest.getInstance("SHA-256")

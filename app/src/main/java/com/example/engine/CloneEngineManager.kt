@@ -34,14 +34,18 @@ class CloneEngineManager(private val context: Context) {
                 if (oemSupported) {
                     oemDualAppEngine to "Selected by user preference: native ${Build.MANUFACTURER.uppercase()} engine."
                 } else {
-                    workProfileEngine to "OEM engine requested but device not supporting it; falling back to Work Profile."
+                    virtualizationEngine to "OEM engine not supported; using Isolated Sandbox engine."
                 }
             }
             "WORK_PROFILE", "WORKPROFILE" -> {
-                workProfileEngine to "Selected by user preference: Android Work Profile sandbox."
+                if (wpState == WorkProfileState.READY) {
+                    workProfileEngine to "Selected by user preference: Android Work Profile sandbox."
+                } else {
+                    virtualizationEngine to "Work Profile not provisioned; using Isolated Sandbox engine."
+                }
             }
-            "VIRTUALIZATION", "VIRT" -> {
-                virtualizationEngine to "Selected by user preference: experimental sandboxed virtualization."
+            "VIRTUALIZATION", "VIRT", "SANDBOX" -> {
+                virtualizationEngine to "Selected by user preference: Isolated Sandbox engine."
             }
             else -> { // AUTO mode
                 if (oemSupported) {
@@ -49,10 +53,8 @@ class CloneEngineManager(private val context: Context) {
                     oemDualAppEngine to "Automatically selected $mfgName Native Dual Space engine."
                 } else if (wpState == WorkProfileState.READY) {
                     workProfileEngine to "Android Work Profile is ready and active."
-                } else if (wpSupported) {
-                    workProfileEngine to "Android Work Profile sandbox for OS-level isolation."
                 } else {
-                    virtualizationEngine to "Selected Virtualization Engine."
+                    virtualizationEngine to "Isolated Sandbox Engine (Per-instance storage & database isolation)."
                 }
             }
         }

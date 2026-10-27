@@ -117,7 +117,7 @@ fun MulticlonixApp(viewModel: MainViewModel) {
 
     // Modal Bottom Sheets & Dialogs
     if (isAddSheetVisible) {
-        AddAppsBottomSheet(
+        com.example.ui.screens.AppPickerBottomSheet(
             apps = installedApps,
             selectedPackages = selectedPackages,
             currentCloneCount = cloneCount,
@@ -126,6 +126,7 @@ fun MulticlonixApp(viewModel: MainViewModel) {
             searchQuery = searchQuery,
             onSearchChange = viewModel::setSearchQuery,
             onToggleSelect = viewModel::togglePackageSelection,
+            onAppClick = { pkg, name -> viewModel.createIsolatedInstance(pkg, name) },
             onCancel = viewModel::hideAddSheet,
             onConfirmClone = viewModel::createClonesForSelected
         )

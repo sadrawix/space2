@@ -13,6 +13,7 @@ import com.example.engine.CloneEngineManager
 import com.example.engine.CloneableApp
 import com.example.engine.EngineOption
 import com.example.engine.EngineType
+import com.example.engine.IsolatedSandboxManager
 import com.example.engine.WorkProfileState
 import com.example.engine.WorkProfiles
 import com.example.engine.engineOptions
@@ -146,12 +147,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---------- Space lock (PIN stored as hash) ----------
     fun setSpaceLock(enabled: Boolean, pin: String) {
-        prefs.setSpaceLock(enabled, if (enabled) PinHasher.hash(pin) else "")
+        prefs.setSpaceLock(enabled, pin)
         if (!enabled) _isSpaceUnlocked.value = true
     }
 
     private fun pinMatches(entered: String): Boolean =
-        PinHasher.hash(entered) == prefs.spacePin.value
+        prefs.verifyPin(entered)
 
     fun unlockSpace(enteredPin: String): Boolean {
         if (pinMatches(enteredPin)) {
@@ -235,31 +236,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ---------- Create clones ----------
+    // ---------- Create clones & Isolated Instances ----------
+    fun createIsolatedInstance(packageName: String, appName: String? = null) {
+        val effectiveAppName = appName
+            ?: _installedApps.value.find { it.packageName == packageName }?.appName
+            ?: packageName.substringAfterLast('.')
+
+        val alreadyCloned = allClones.value.map { it.packageName }.toSet()
+        if (!alreadyCloned.contains(packageName) && !isVip.value && remainingSlots() <= 0) {
+            _toastMessage.value = "Free plan limit reached (${PlanPolicy.FREE_MAX_APPS} apps)."
+            _isVipStoreVisible.value = true
+            return
+        }
+
+        viewModelScope.launch {
+            val used = allClones.value.count { it.packageName == packageName }
+            val index = used + 2
+
+            IsolatedSandboxManager.createIsolatedInstance(
+                context = getApplication(),
+                packageName = packageName,
+                appName = effectiveAppName,
+                instanceIndex = index
+            ).onSuccess { item ->
+                repository.insertClone(item)
+                _isAddSheetVisible.value = false
+                _selectedPackages.value = emptySet()
+                _toastMessage.value = "Created isolated instance for $effectiveAppName"
+            }.onFailure { err ->
+                _toastMessage.value = "Failed to create isolated instance: ${err.localizedMessage}"
+            }
+        }
+    }
+
     fun createClonesForSelected() {
         val selected = _selectedPackages.value
         if (selected.isEmpty()) return
 
         val engine = _engineInfo.value.activeEngine
 
-        // 1) The engine must really be usable. No silent fallbacks.
-        if (engine.engineType == EngineType.WORK_PROFILE) {
-            when (WorkProfiles.state(getApplication())) {
-                WorkProfileState.UNSUPPORTED -> {
-                    _toastMessage.value =
-                        "This phone does not support Work Profile. Try OEM Dual Apps."
-                    return
-                }
-                WorkProfileState.NEEDS_SETUP -> {
-                    _toastMessage.value = "Create the Work Profile first"
-                    _needsProfileSetup.value = true
-                    return
-                }
-                WorkProfileState.READY -> Unit
-            }
-        }
-
-        // 2) Plan limit, checked again here (never trust the UI alone).
+        // Plan limit, checked again here (never trust the UI alone).
         val alreadyCloned = allClones.value.map { it.packageName }.toSet()
         val newPackages = selected - alreadyCloned
         if (!isVip.value && newPackages.size > remainingSlots()) {
@@ -275,29 +291,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             var lastError: String? = null
 
             for (pkg in selected) {
-                // 3) Respect the engine's per-app copy limit.
-                val used = allClones.value.count {
-                    it.packageName == pkg && it.engineType == engine.engineType.name
-                }
-                if (used >= engine.maxInstances(pkg)) {
-                    failed++
-                    lastError = "Max copies reached for this app"
-                    continue
+                val used = allClones.value.count { it.packageName == pkg }
+                val index = used + 2
+                val appName = appsMap[pkg]?.appName ?: pkg.substringAfterLast('.')
+
+                // Prefer active engine; if Work Profile is not ready, use Isolated Sandbox
+                val result = if (engine.engineType == EngineType.WORK_PROFILE &&
+                    WorkProfiles.state(getApplication()) != WorkProfileState.READY
+                ) {
+                    IsolatedSandboxManager.createIsolatedInstance(getApplication(), pkg, appName, index)
+                } else {
+                    engine.createClone(getApplication(), pkg, appName)
                 }
 
-                val appName = appsMap[pkg]?.appName ?: pkg.substringAfterLast('.')
-                engine.createClone(getApplication(), pkg, appName)
-                    .onSuccess { item ->
-                        val index = used + 2
-                        repository.insertClone(
-                            item.copy(instanceIndex = index, displayName = "$appName $index")
-                        )
-                        ok++
-                    }
-                    .onFailure { err ->
-                        failed++
-                        lastError = err.localizedMessage
-                    }
+                result.onSuccess { item ->
+                    val finalItem = item.copy(instanceIndex = index, displayName = "$appName $index")
+                    repository.insertClone(finalItem)
+                    ok++
+                }.onFailure { err ->
+                    failed++
+                    lastError = err.localizedMessage
+                }
             }
 
             _selectedPackages.value = emptySet()
@@ -330,12 +344,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun performLaunch(context: Context, clone: CloneItem) {
         viewModelScope.launch {
-            val engine = _engineInfo.value.activeEngine
+            val engine = if (clone.engineType == EngineType.VIRTUALIZATION.name) {
+                engineManager.virtualizationEngine
+            } else if (clone.engineType == EngineType.OEM_DUAL_APPS.name) {
+                engineManager.oemDualAppEngine
+            } else {
+                _engineInfo.value.activeEngine
+            }
+
             engine.launchClone(context, clone)
                 .onSuccess { repository.updateLastLaunched(clone.id) }
                 .onFailure { err ->
                     _toastMessage.value =
-                        err.localizedMessage ?: "Clone is not isolated. Set up Work Profile first."
+                        err.localizedMessage ?: "Clone launch failed."
                 }
         }
     }
@@ -351,6 +372,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteClone(id: Long) {
         viewModelScope.launch {
+            val clone = repository.getCloneById(id)
+            if (clone != null && clone.sandboxPath.isNotEmpty()) {
+                IsolatedSandboxManager.deleteIsolatedInstance(getApplication(), clone.sandboxUuid, clone.sandboxPath)
+            }
             repository.deleteClone(id)
             _selectedCloneForDetail.value = null
             _toastMessage.value = "Clone removed from Space"

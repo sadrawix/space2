@@ -72,7 +72,7 @@ import com.example.ui.theme.TextWhitePrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddAppsBottomSheet(
+fun AppPickerBottomSheet(
     apps: List<CloneableApp>,
     selectedPackages: Set<String>,
     currentCloneCount: Int,
@@ -81,6 +81,7 @@ fun AddAppsBottomSheet(
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     onToggleSelect: (String) -> Unit,
+    onAppClick: (String, String) -> Unit,
     onCancel: () -> Unit,
     onConfirmClone: () -> Unit,
     modifier: Modifier = Modifier
@@ -88,7 +89,6 @@ fun AddAppsBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val maxClones = if (isVip) 99 else 3
     val totalCount = currentCloneCount + selectedPackages.size
-    val context = LocalContext.current
 
     var selectedCategory by remember { mutableStateOf("All") }
     val categories = listOf("All", "Social", "Messaging", "Games")
@@ -106,10 +106,10 @@ fun AddAppsBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onCancel,
         sheetState = sheetState,
-        containerColor = Color(0xFFFBFBFD), // Matches the white/clean bottom sheet in Screenshot 2
+        containerColor = Color(0xFFFBFBFD),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         dragHandle = null,
-        modifier = modifier.testTag("add_apps_bottom_sheet")
+        modifier = modifier.testTag("app_picker_bottom_sheet")
     ) {
         Column(
             modifier = Modifier
@@ -117,7 +117,7 @@ fun AddAppsBottomSheet(
                 .fillMaxHeight(0.85f)
                 .navigationBarsPadding()
         ) {
-            // Header title matching Screenshot 2: "Agregar a DualSpace (1 / 3)"
+            // Header title matching specification: "Add to Multiclonix Space"
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -130,7 +130,7 @@ fun AddAppsBottomSheet(
                         totalCount.toString(),
                         if (isVip) "∞" else maxClones.toString()
                     ),
-                    color = Color(0xFF1E88E5), // Clean blue matching DualSpace title
+                    color = Color(0xFF1E88E5),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.testTag("add_sheet_title")
@@ -241,21 +241,21 @@ fun AddAppsBottomSheet(
                             AppPickerItem(
                                 app = app,
                                 isSelected = selectedPackages.contains(app.packageName),
-                                onClick = { onToggleSelect(app.packageName) }
+                                onClick = { onAppClick(app.packageName, app.appName) },
+                                onToggleCheck = { onToggleSelect(app.packageName) }
                             )
                         }
                     }
                 }
             }
 
-            // Bottom Buttons matching Screenshot 2: "Cancelar" and bright green "Clonar"
+            // Bottom Buttons: Cancel and bright green Clone
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Cancel Button
                 OutlinedButton(
                     onClick = onCancel,
                     shape = RoundedCornerShape(8.dp),
@@ -277,7 +277,6 @@ fun AddAppsBottomSheet(
                     )
                 }
 
-                // Green Clone Button (matches Screenshot 2 #2ED573)
                 Button(
                     onClick = onConfirmClone,
                     enabled = selectedPackages.isNotEmpty(),
@@ -285,8 +284,8 @@ fun AddAppsBottomSheet(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = EmeraldCloneGreen,
                         contentColor = Color.White,
-                        disabledContainerColor = Color(0xFFA8E6CF),
-                        disabledContentColor = Color.White.copy(alpha = 0.7f)
+                        disabledContainerColor = EmeraldCloneGreen.copy(alpha = 0.4f),
+                        disabledContentColor = Color.White.copy(alpha = 0.6f)
                     ),
                     modifier = Modifier
                         .weight(1f)
@@ -304,11 +303,47 @@ fun AddAppsBottomSheet(
     }
 }
 
+/**
+ * Backward compatibility alias for AddAppsBottomSheet
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddAppsBottomSheet(
+    apps: List<CloneableApp>,
+    selectedPackages: Set<String>,
+    currentCloneCount: Int,
+    isVip: Boolean,
+    isLoading: Boolean,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
+    onToggleSelect: (String) -> Unit,
+    onAppClick: ((String, String) -> Unit)? = null,
+    onCancel: () -> Unit,
+    onConfirmClone: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AppPickerBottomSheet(
+        apps = apps,
+        selectedPackages = selectedPackages,
+        currentCloneCount = currentCloneCount,
+        isVip = isVip,
+        isLoading = isLoading,
+        searchQuery = searchQuery,
+        onSearchChange = onSearchChange,
+        onToggleSelect = onToggleSelect,
+        onAppClick = onAppClick ?: { pkg, _ -> onToggleSelect(pkg) },
+        onCancel = onCancel,
+        onConfirmClone = onConfirmClone,
+        modifier = modifier
+    )
+}
+
 @Composable
 fun AppPickerItem(
     app: CloneableApp,
     isSelected: Boolean,
     onClick: () -> Unit,
+    onToggleCheck: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -352,18 +387,21 @@ fun AppPickerItem(
                 }
             }
 
-            // Selection Circle Indicator matching Screenshot 2 (top right checkmark)
+            // Selection Circle Indicator
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .size(20.dp)
+                    .size(22.dp)
                     .clip(CircleShape)
                     .background(if (isSelected) EmeraldCloneGreen else Color(0xFFD6DBDF))
                     .border(
                         1.5.dp,
                         if (isSelected) EmeraldCloneGreen else Color.White,
                         CircleShape
-                    ),
+                    )
+                    .clickable {
+                        if (onToggleCheck != null) onToggleCheck() else onClick()
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 if (isSelected) {

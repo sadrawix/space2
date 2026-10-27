@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import com.example.data.dao.CloneDao
 import com.example.data.model.CloneItem
 
-@Database(entities = [CloneItem::class], version = 3, exportSchema = false)
+@Database(entities = [CloneItem::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cloneDao(): CloneDao
 
